@@ -9,8 +9,7 @@ def populate_scouts():
     conn = get_connection()
     cursor = conn.cursor()
 
-    # add one scout
-    cursor.execute("INSERT OR IGNORE INTO Scout (name, region, teamID) VALUES ('John Doe', 'Southeast', 'TBR')")
+    cursor.execute("INSERT OR IGNORE INTO Scout (name, region, teamID) VALUES ('Devon Dunham', 'Southeast', 'TBR')")
     conn.commit()
     conn.close()
 
@@ -18,7 +17,6 @@ def populate_teams():
     conn = get_connection()
     cursor = conn.cursor()
 
-    # tuple for each team: (teamID, name, division)
     teams = [
         ('TBR', 'Tampa Bay Rays', 'AL East'),
         ('NYY', 'New York Yankees', 'AL East'),
