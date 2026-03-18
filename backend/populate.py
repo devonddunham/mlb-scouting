@@ -115,8 +115,8 @@ def get_player_team(first_name: str, last_name: str, player_id: int) -> str | No
 # populate database with players
 def populate_players():
     # load in csv files
-    batters_df = pd.read_csv('../data/batters.csv')
-    pitchers_df = pd.read_csv('../data/pitchers.csv')
+    batters_df = pd.read_csv('data/batter.csv')
+    pitchers_df = pd.read_csv('data/pitchers.csv')
 
     # split the string for last name and first name
     # orginally in form "lastname, firstname"
@@ -177,8 +177,8 @@ def populate_players():
 
 def populate_metrics():
     # load in csv files
-    batters_df = pd.read_csv('../data/batters.csv')
-    pitchers_df = pd.read_csv('../data/pitchers.csv')
+    batters_df = pd.read_csv('data/batter.csv')
+    pitchers_df = pd.read_csv('data/pitchers.csv')
 
     conn = get_db_connection()
     cur = conn.cursor()
