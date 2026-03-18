@@ -3,3 +3,5 @@ pybaseball
 flask-sqlalchemy
 psycopg2-binary
 python-dotenv
+bs4
+requests
