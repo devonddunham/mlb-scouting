@@ -54,15 +54,13 @@ def create_tables():
         CREATE TABLE IF NOT EXISTS Scout (
             scout_id SERIAL PRIMARY KEY,
             name VARCHAR(100) NOT NULL,
-            region VARCHAR(50),
             team_id VARCHAR(10) REFERENCES Team(team_id)
         )''')
 
     # Player many-to-one with Team
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS Player (
-            player_id VARCHAR(50) PRIMARY KEY, -- BBRef ID
-            mlbam_id INTEGER UNIQUE NOT NULL,  -- Statcast ID
+            player_id INTEGER PRIMARY KEY,
             first_name VARCHAR(50),
             last_name VARCHAR(50),
             primary_position VARCHAR(20),
@@ -73,26 +71,32 @@ def create_tables():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS ScoutingReport (
             report_id SERIAL PRIMARY KEY,
-            player_id VARCHAR(50) REFERENCES Player(player_id),
+            player_id INTEGER REFERENCES Player(player_id),
             scout_id INTEGER REFERENCES Scout(scout_id),
-            report_date DATE DEFAULT CURRENT_DATE,
-            overall_grade INTEGER, -- calculated by advanced function
-            scout_comments TEXT
+            report_date INTEGER, -- YYYY
+            overall_grade INTEGER -- calculated by advanced function
         )''')
 
     # PerformanceMetrics one-to-one with ScoutingReport
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS PerformanceMetrics (
             report_id INTEGER PRIMARY KEY REFERENCES ScoutingReport(report_id) ON DELETE CASCADE,
-            exit_velocity REAL,
-            launch_angle REAL,
-            bat_speed REAL,
-            pitch_velocity REAL,
-            pfx_x REAL,
-            pfx_z REAL,
-            pitch_extension REAL,
-            xwOBA REAL,
-            swing_length REAL
+            exit_velocity REAL, -- AVG speed of the ball off the bat in miles per hour
+            launch_angle REAL, -- AVG angle of the ball off the bat in degrees, where 0 is level, positive is upward, and negative is downward.
+            xwOBA REAL, -- Expected Weighted On-Base Average, a comprehensive metric that estimates a player's offensive contribution based on the quality of contact and plate discipline.
+            xOBP REAL, -- Expected On-Base Percentage, which estimates how often a player reaches base based on the quality of contact and plate discipline.
+            hard_hit_percentage REAL, -- percentage of batted balls with an exit velocity of 95 mph or higher, showing the player's ability to make strong contact. for both batters and pitchers. pitchers want it low, batters want it high
+            zone_swing_percentage REAL,
+            zone_swing_miss_percentage REAL,
+            out_zone_swing_percentage REAL,
+            out_zone_swing_miss_percentage REAL, -- for both batters and pitchers
+            barrel_percentage REAL, -- percentage of batted balls that are 'barrels', balls hit with optimal combo of exit velocity and launch angle. Pitchers want it low
+            k_percentage REAL,
+            bb_percentage REAL,
+            whiff_percentage REAL, -- percentage of swings that miss the ball entirely, pitchers want it high
+            gb_percentage REAL, -- percentage of batted balls that are ground balls, pitchers want it high
+            four_seam_velocity REAL, -- average velocity of the pitcher's four-seam fastball, key indicator of pitching strength
+            four_seam_spin REAL -- average spin rate of the pitcher's four-seam fastball, higher spin can indicate better movement and deception
         )''')
 
     print("intialized database")

@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+  <head>
+    <title>{{ title }}</title>
+  </head>
+  <body>
+    <h1>{{ title }}</h1>
+    <a href="/">Back to Home</a>
+    <table border="1">
+      <thead>
+        <tr>
+          {% if data %} {% for key in data[0].keys() %}
+          <th>{{ key }}</th>
+          {% endfor %} {% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in data %}
+        <tr>
+          {% for value in row %}
+          <td>{{ value }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </body>
+</html>
