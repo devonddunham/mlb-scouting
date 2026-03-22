@@ -115,7 +115,7 @@ def get_player_team(first_name: str, last_name: str, player_id: int) -> str | No
 # populate database with players
 def populate_players():
     # load in csv files
-    batters_df = pd.read_csv('data/batter.csv')
+    batters_df = pd.read_csv('data/batters.csv')
     pitchers_df = pd.read_csv('data/pitchers.csv')
 
     # split the string for last name and first name
@@ -177,7 +177,7 @@ def populate_players():
 
 def populate_metrics():
     # load in csv files
-    batters_df = pd.read_csv('data/batter.csv')
+    batters_df = pd.read_csv('data/batters.csv')
     pitchers_df = pd.read_csv('data/pitchers.csv')
 
     conn = get_db_connection()
@@ -318,7 +318,7 @@ def populate_scouts():
             INSERT INTO Scout (scout_id, name, team_id)
             VALUES (%s, %s, %s)
             ON CONFLICT (scout_id) DO NOTHING
-        ''', (1, 'John Doe', 'TBR'))
+        ''', (1, 'John Doe', 'TB'))
 
         # Keep SERIAL sequence in sync after manual insert
         cur.execute('''

@@ -39,5 +39,8 @@ def reports():
     data = fetch_data(query)
     return render_template('table.html', title="Scouting Reports", data=data)
 
+
+
+
 if __name__ == '__main__':
     app.run(debug=True)
