@@ -1,15 +1,15 @@
 #TODO: Create, update, delete
-from flask import Flask, render_template, request,redirect, url_for, flash
+from flask import Flask, render_template, request,redirect, url_for, flash, session
 from database import *
 import psycopg2.extras
 
 app = Flask(__name__)
 app.secret_key ="23adkfn23rfnjfa98" 
 
-def fetch_data(query):
+def fetch_data(query,params=None):
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    cur.execute(query)
+    cur.execute(query,params)
     data = cur.fetchall()
     cur.close()
     conn.close()
@@ -41,13 +41,13 @@ def reports():
     data = fetch_data(query)
     return render_template('table.html', title="Scouting Reports", data=data)
 
+
+
 @app.route('/newScout') #goes with /add scout logic
 def newScout():
     teams = fetch_data("SELECT * FROM Team")
     return render_template('addScout.html',teams=teams)
-
-#creates scout logic
-@app.route('/addScout', methods=['GET','POST'])
+@app.route('/addScout', methods=['GET','POST']) #creates scout logic, pairs with /new scout
 def addScout():
     teams = fetch_data("SELECT * FROM Team")
 
@@ -69,6 +69,66 @@ def addScout():
             return render_template('addScout.html',error=str(e),teams=teams)
 
     return render_template('addScout.html', teams=teams)
+
+
+
+
+@app.route('/addReport')    #renders page
+def addReport():
+    players = fetch_data("SELECT first_name, last_name FROM Player")
+    return render_template('addReport.html',players=players)
+@app.route('/createReport', methods = ['GET','POST']) #logic with addReport
+def createReport():
+    players = fetch_data("SELECT first_name, last_name FROM Player")
+    
+    if request.method == 'POST':
+        try:
+            name = request.form["Name"]
+            player = request.form["player"]
+
+            thing,message = checkScout(name) #puts scout in db, checks as well
+
+            if thing==True:     #name doesn't exist, stops from going further
+                flash("Scout not found")
+                return render_template('addReport.html',players=players)
+            
+            session['name'] = name      #store for later redirection
+            session['player'] = player  #store for later redirection
+            
+            
+            player_parts = player.split()
+            firstName = player_parts[0]
+            lastName = player_parts[1]
+    
+            position = fetch_data("SELECT primary_position FROM Player WHERE first_name = %s AND last_name = %s",(firstName,lastName,))
+            print(position)
+            
+            if position[0][0] == ('P'):   #IF player is a pitcher:
+                return redirect(url_for('addPitcherInfo')) #above goes with this
+            
+            #else normal player
+            return redirect(url_for('addPositionInfo')) #above goes with this
+
+
+        except Exception as e:
+            print("ERROR")
+            return render_template('addReport.html',error=str(e),players=players)
+
+
+
+@app.route('/addReport/addPitcherInfo')    #renders page for PITCHERS ONLY
+def addPitcherInfo():
+    name = session.get('name')
+    player = session.get('player')
+    return render_template('addPitcherInfo.html', name=name, player=player)
+
+
+
+@app.route('/addReport/addPositionInfo') #renders page for PITCHERS ONLY
+def addPositionInfo():
+    name = session.get('name')
+    player = session.get('player')
+    return render_template('addPositionInfo.html', name=name, player=player)
 
 if __name__ == '__main__':
     app.run(debug=True)

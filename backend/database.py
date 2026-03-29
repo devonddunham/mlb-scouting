@@ -149,6 +149,7 @@ def checkScout(name):
     
     return False,"Error. Name exists in database"
 
+
 def start_db():
     if input("Drop existing MLB tables? y/n: ").lower() == 'y':
         drop_tables()
