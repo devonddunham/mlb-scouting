@@ -1,8 +1,10 @@
-from flask import Flask, render_template
-from database import get_db_connection
+#TODO: Create, update, delete
+from flask import Flask, render_template, request,redirect, url_for, flash
+from database import *
 import psycopg2.extras
 
 app = Flask(__name__)
+app.secret_key ="23adkfn23rfnjfa98" 
 
 def fetch_data(query):
     conn = get_db_connection()
@@ -13,21 +15,21 @@ def fetch_data(query):
     conn.close()
     return data
 
-@app.route('/')
+@app.route('/') #home
 def index():
-    return "<h1>MLB Scouting App</h1><ul><li><a href='/players'>Players</a></li><li><a href='/teams'>Teams</a></li><li><a href='/reports'>Scouting Reports</a></li></ul>"
+    return render_template('home.html')
 
-@app.route('/players')
+@app.route('/players') #shows all the players
 def players():
     data = fetch_data("SELECT * FROM Player")
     return render_template('table.html', title="Players", data=data)
 
-@app.route('/teams')
+@app.route('/teams')    #shows all the teams
 def teams():
     data = fetch_data("SELECT * FROM Team")
     return render_template('table.html', title="Teams", data=data)
 
-@app.route('/reports')
+@app.route('/reports')  #shows all information on reports
 def reports():
     # join tables to show actual names instead of just ids
     query = """
@@ -39,8 +41,34 @@ def reports():
     data = fetch_data(query)
     return render_template('table.html', title="Scouting Reports", data=data)
 
+@app.route('/newScout') #goes with /add scout logic
+def newScout():
+    teams = fetch_data("SELECT * FROM Team")
+    return render_template('addScout.html',teams=teams)
 
+#creates scout logic
+@app.route('/addScout', methods=['GET','POST'])
+def addScout():
+    teams = fetch_data("SELECT * FROM Team")
 
+    if request.method == 'POST':
+        try:
+            name = request.form["Name"]
+            teamId = request.form["team_id"]
+
+            thing,message = makeScout(name, teamId) #puts scout in db, checks as well
+            
+            if thing==False:
+                flash(message)
+                return render_template('addScout.html',teams=teams)
+            
+            flash(message)
+            return redirect(url_for('index'))
+
+        except Exception as e:
+            return render_template('addScout.html',error=str(e),teams=teams)
+
+    return render_template('addScout.html', teams=teams)
 
 if __name__ == '__main__':
     app.run(debug=True)

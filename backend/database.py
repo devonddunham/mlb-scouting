@@ -104,6 +104,51 @@ def create_tables():
     cursor.close()
     conn.close()
 
+def makeScout(name, teamId):    #makes a scout
+
+    thing,message = checkScout(name)
+    if(thing==True):    #makes sure name is free
+        conn = None
+        cur = None
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor()
+
+            cur.execute('INSERT INTO Scout (name, team_id) VALUES (%s, %s)',(name, teamId))
+
+            conn.commit()
+            cur.close()
+            conn.close()
+
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            raise e #send back
+
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
+    
+    return thing,message
+    
+
+def checkScout(name):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT name FROM Scout WHERE name = %s", (name,))
+    findName = cur.fetchone()
+
+    cur.close()
+    conn.close()
+    
+    if findName is None:
+        return True,"Success! Scout created!"
+    
+    return False,"Error. Name exists in database"
+
 def start_db():
     if input("Drop existing MLB tables? y/n: ").lower() == 'y':
         drop_tables()
