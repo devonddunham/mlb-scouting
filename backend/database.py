@@ -149,7 +149,7 @@ def checkScout(name):
     
     return False,"Error. Name exists in database"
 
-def createReport(scout,player):
+def createReport(scout,player,year):
     player_parts = player.split()   #break apart for sending names along
     firstName = player_parts[0]
     lastName = player_parts[1]
@@ -169,17 +169,14 @@ def createReport(scout,player):
     if scout_id:
         scout_id = scout_id[0]
 
-    year = datetime.now().year   #GET RID OF LATER, TESTING PURPOSES RN
     grade = advancedFunc()      #IMPLEMENTATION AT BOTTOM
 
     try:
-        print("inside try block")
         #check if this already exists(all data matches) or not before adding it!
         cur.execute('''SELECT report_id FROM ScoutingReport WHERE player_id=%s AND
                         scout_id=%s AND overall_grade=%s AND report_date=%s''',
                         (play_id,scout_id,grade,year))
         ans = cur.fetchall()
-        
         if ans:         #if answer is true, the report already exists
             return None
         else:   #report doesn't exist, proceeed with making of the report
@@ -208,9 +205,9 @@ def createReport(scout,player):
 
 
 
-def insertPitcherInfo(scout,player,hh,outzone,barrel,k,bb,whiff,gb,velocity,spin):
+def insertPitcherInfo(scout,player,hh,outzone,barrel,k,bb,whiff,gb,velocity,spin,year):
     #make scouting report
-    id=createReport(scout,player)  #make actual report first, need report_id for performanceMetrics
+    id=createReport(scout,player,year)  #make actual report first, need report_id for performanceMetrics
     
     if id == None:
         return "Error, this report already exists"
@@ -232,6 +229,32 @@ def insertPitcherInfo(scout,player,hh,outzone,barrel,k,bb,whiff,gb,velocity,spin
     conn.close()
 
     return "Report created successfully"
+
+def insertPositionInfo(scoutName,player,year,exitV,launchAng,xwoba,xobp,hh,zoneSwing,zoneSwingMiss,outZoneSwing,outZoneSwingMiss):
+    id=createReport(scoutName,player,year)  #make actual report first, need report_id for performanceMetrics
+    print("ID: " + str(id))
+    if id == None:
+        return "Error, this report already exists"
+    
+    #Else add the info in and connect everything
+    conn = get_db_connection()
+    cur = conn.cursor()
+ 
+    cur.execute('''INSERT INTO PerformanceMetrics
+                    (report_id,exit_velocity,launch_angle,xwoba,xobp,hard_hit_percentage,zone_swing_percentage,zone_swing_miss_percentage,
+                    out_zone_swing_percentage,out_zone_swing_miss_percentage,barrel_percentage,k_percentage,bb_percentage,whiff_percentage,
+                    gb_percentage,four_seam_velocity,four_seam_spin) VALUES
+                    (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''',
+                    (id,exitV,launchAng,xwoba,xobp,hh,zoneSwing,zoneSwingMiss,outZoneSwing,outZoneSwingMiss,None,None,None,None,None,None,None)
+                )
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return "Report created successfully"
+
+
 
 def advancedFunc():
     return 0

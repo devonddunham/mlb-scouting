@@ -86,6 +86,7 @@ def createReport():
         try:
             name = request.form["Name"]
             player = request.form["player"]
+            year = request.form["Year"]
 
             thing,message = checkScout(name) #puts scout in db, checks as well
 
@@ -95,6 +96,7 @@ def createReport():
             
             session['name'] = name      #store for later redirection
             session['player'] = player  #store for later redirection
+            session['year'] = year
             
             
             player_parts = player.split()   #break apart for sending names along
@@ -125,6 +127,7 @@ def pitcherStats():
     try:
         scoutName = session.get('name') #get scout name and player from session (prev passed through)
         player = session.get('player')
+        year = session.get('year')
 
         #make everyting floats
         hh = float(request.form['hh_perc'])
@@ -137,7 +140,7 @@ def pitcherStats():
         velocity = float(request.form['fourSeamVel_perc'])
         spin = float(request.form['fourSeamSpin_perc'])
 
-        message = insertPitcherInfo(scoutName,player,hh,outzone,barrel,k,bb,whiff,gb,velocity,spin)
+        message = insertPitcherInfo(scoutName,player,hh,outzone,barrel,k,bb,whiff,gb,velocity,spin,year)
 
         flash(message)
         return redirect(url_for('index'))
@@ -148,13 +151,40 @@ def pitcherStats():
 
 
 
-
-
 @app.route('/addReport/addPositionInfo') #renders page for POSITION PLAYERS ONLY
 def addPositionInfo():
     name = session.get('name')
     player = session.get('player')
     return render_template('addPositionInfo.html', name=name, player=player)
+@app.route('/addReport/addPositionInfo/playerStats',methods=['POST']) #does logic for above function
+def playerStats():
+    try:
+        scoutName = session.get('name') #get scout name and player from session (prev passed through)
+        player = session.get('player')
+        year = session.get('year')
+        
+        #make everyting floats
+        exitV = float(request.form['exit_velocity'])
+        launchAng = float(request.form['launch_angle'])
+        xwoba = float(request.form['xwoba'])
+        xobp = float(request.form['xobp'])
+        hh = float(request.form['hh'])
+        zoneSwing = float(request.form['zoneSwing'])
+        zoneSwingMiss = float(request.form['zoneSwingMiss'])
+        outZoneSwing = float(request.form['outzoneSwing'])
+        outZoneSwingMiss = float(request.form['outzoneSwingMiss'])
+
+        message = insertPositionInfo(scoutName,player,year,exitV,launchAng,xwoba,xobp,hh,zoneSwing,zoneSwingMiss,outZoneSwing,outZoneSwingMiss)
+
+        flash(message)
+        return redirect(url_for('index'))
+    except Exception as e:
+        flash("Error creating report")
+        return render_template('addPositionInfo.html')
+
+@app.route('/updateReport')
+def updateReport():
+    return render_template('updateReport.html')
 
 if __name__ == '__main__':
     app.run(debug=True)
