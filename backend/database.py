@@ -2,6 +2,8 @@ import os
 import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
+from datetime import datetime   #get rid of later
+
 
 # load env variables from .env file
 load_dotenv()
@@ -105,7 +107,6 @@ def create_tables():
     conn.close()
 
 def makeScout(name, teamId):    #makes a scout
-
     thing,message = checkScout(name)
     if(thing==True):    #makes sure name is free
         conn = None
@@ -132,7 +133,6 @@ def makeScout(name, teamId):    #makes a scout
                 conn.close()
     
     return thing,message
-    
 
 def checkScout(name):
     conn = get_db_connection()
@@ -148,6 +148,93 @@ def checkScout(name):
         return True,"Success! Scout created!"
     
     return False,"Error. Name exists in database"
+
+def createReport(scout,player):
+    player_parts = player.split()   #break apart for sending names along
+    firstName = player_parts[0]
+    lastName = player_parts[1]
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT player_id FROM Player WHERE first_name = %s AND last_name= %s",(firstName,lastName,)) #get player_id 
+    play_id = cur.fetchone()
+    
+    if play_id:     #get rid of tuple
+        play_id = play_id[0]
+
+    cur.execute("SELECT scout_id FROM Scout WHERE name = %s",(scout,))
+    scout_id = cur.fetchone()
+    
+    if scout_id:
+        scout_id = scout_id[0]
+
+    year = datetime.now().year   #GET RID OF LATER, TESTING PURPOSES RN
+    grade = advancedFunc()      #IMPLEMENTATION AT BOTTOM
+
+    try:
+        print("inside try block")
+        #check if this already exists(all data matches) or not before adding it!
+        cur.execute('''SELECT report_id FROM ScoutingReport WHERE player_id=%s AND
+                        scout_id=%s AND overall_grade=%s AND report_date=%s''',
+                        (play_id,scout_id,grade,year))
+        ans = cur.fetchall()
+        
+        if ans:         #if answer is true, the report already exists
+            return None
+        else:   #report doesn't exist, proceeed with making of the report
+            cur.execute('''INSERT INTO ScoutingReport (player_id, scout_id, report_date, overall_grade)
+                        VALUES (%s, %s, %s, %s)''',
+                        (play_id,scout_id,year,grade))
+            
+            conn.commit()
+
+            cur.execute('''SELECT report_id FROM ScoutingReport WHERE player_id=%s AND
+                        scout_id=%s AND overall_grade=%s AND report_date=%s''',
+                        (play_id,scout_id,grade,year))
+            rep_id = cur.fetchone()
+            return rep_id[0]      #return report_id for said ScoutingReport
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise e #send back
+
+    finally:        #close everything
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+
+def insertPitcherInfo(scout,player,hh,outzone,barrel,k,bb,whiff,gb,velocity,spin):
+    #make scouting report
+    id=createReport(scout,player)  #make actual report first, need report_id for performanceMetrics
+    
+    if id == None:
+        return "Error, this report already exists"
+    
+    #Else add the info in and connect everything
+    conn = get_db_connection()
+    cur = conn.cursor()
+ 
+    cur.execute('''INSERT INTO PerformanceMetrics
+                    (report_id,exit_velocity,launch_angle,xwoba,xobp,hard_hit_percentage,zone_swing_percentage,zone_swing_miss_percentage,
+                    out_zone_swing_percentage,out_zone_swing_miss_percentage,barrel_percentage,k_percentage,bb_percentage,whiff_percentage,
+                    gb_percentage,four_seam_velocity,four_seam_spin) VALUES
+                    (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''',
+                    (id,None,None,None,None,hh,None,None,None,outzone,barrel,k,bb,whiff,gb,velocity,spin)
+                )
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    return "Report created successfully"
+
+def advancedFunc():
+    return 0
 
 
 def start_db():

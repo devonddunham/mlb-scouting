@@ -3,6 +3,7 @@ from flask import Flask, render_template, request,redirect, url_for, flash, sess
 from database import *
 import psycopg2.extras
 
+
 app = Flask(__name__)
 app.secret_key ="23adkfn23rfnjfa98" 
 
@@ -96,19 +97,17 @@ def createReport():
             session['player'] = player  #store for later redirection
             
             
-            player_parts = player.split()
+            player_parts = player.split()   #break apart for sending names along
             firstName = player_parts[0]
             lastName = player_parts[1]
     
             position = fetch_data("SELECT primary_position FROM Player WHERE first_name = %s AND last_name = %s",(firstName,lastName,))
-            print(position)
             
             if position[0][0] == ('P'):   #IF player is a pitcher:
-                return redirect(url_for('addPitcherInfo')) #above goes with this
+                return redirect(url_for('addPitcherInfo',firstName=firstName,lastName =lastName,player=player)) #above goes with this
             
-            #else normal player
+            #else a normal player
             return redirect(url_for('addPositionInfo')) #above goes with this
-
 
         except Exception as e:
             print("ERROR")
@@ -118,13 +117,40 @@ def createReport():
 
 @app.route('/addReport/addPitcherInfo')    #renders page for PITCHERS ONLY
 def addPitcherInfo():
-    name = session.get('name')
+    scoutName = session.get('name') #get scout name and player from session (prev passed through)
     player = session.get('player')
-    return render_template('addPitcherInfo.html', name=name, player=player)
+    return render_template('addPitcherInfo.html',name=scoutName,player=player)
+@app.route('/addReport/addPitcherInfo/pitcherStats',methods=['POST']) #does logic for above function
+def pitcherStats():
+    try:
+        scoutName = session.get('name') #get scout name and player from session (prev passed through)
+        player = session.get('player')
+
+        #make everyting floats
+        hh = float(request.form['hh_perc'])
+        outzone=float(request.form['outzone_perc'])
+        barrel = float(request.form['barrel_perc'])
+        k = float(request.form['k_perc'])
+        bb = float(request.form['bb_perc'])
+        whiff = float(request.form['whiff_perc'])
+        gb = float(request.form['gb_perc'])
+        velocity = float(request.form['fourSeamVel_perc'])
+        spin = float(request.form['fourSeamSpin_perc'])
+
+        message = insertPitcherInfo(scoutName,player,hh,outzone,barrel,k,bb,whiff,gb,velocity,spin)
+
+        flash(message)
+        return redirect(url_for('index'))
+
+    except Exception as e:
+        flash("Error creating report")
+        return render_template('addPitcherInfo.html')
 
 
 
-@app.route('/addReport/addPositionInfo') #renders page for PITCHERS ONLY
+
+
+@app.route('/addReport/addPositionInfo') #renders page for POSITION PLAYERS ONLY
 def addPositionInfo():
     name = session.get('name')
     player = session.get('player')

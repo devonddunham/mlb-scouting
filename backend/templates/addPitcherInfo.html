@@ -1,3 +1,36 @@
 <html>
-    <h1>ENTER PITCHER INFO</h1>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert {{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+    {% endwith %}     
+    
+    <h1>ENTER INFO FOR {{ player }}</h1>
+    <body>
+        <form action="{{url_for('pitcherStats')}}" method = "POST">
+            Hard Hit Percentage
+            <input type = "number" step="any" name = "hh_perc"/><br>
+            Out of Zone Miss Percentage
+            <input type = "number" step="any"name = "outzone_perc"/><br>
+            Barrel Percentage
+            <input type = "number"step="any" name = "barrel_perc"/><br>
+            K Percentage
+            <input type = "number" step="any"name ="k_perc"/></br>
+            BB Percentage <!--walk-->
+            <input type = "number" step="any"name ="bb_perc"/></br>
+            Whiff Percentage
+            <input type = "number" step="any"name ="whiff_perc"/></br>
+            Ground ball Percentage
+            <input type = "number" step="any"name ="gb_perc"/></br>
+            Four-Seam Velocity Percentage
+            <input type = "number" step="any"name ="fourSeamVel_perc"/></br>
+            Four-Seam Spin
+            <input type = "number" step="any"name ="fourSeamSpin_perc"/></br>
+
+            <input type = "submit" value = "Submit"/> 
+        </form>
+        <a href="/addReport">Back</a>
+    </body>
 </html>
