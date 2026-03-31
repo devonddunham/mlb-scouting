@@ -1,108 +1,130 @@
-# an advanced function
-
 import psycopg2
 import pandas as pd
-import numpy as np
 from database import get_db_connection
 
 def calculate_z_score_grade(val, mean, std, higher_is_better=True):
     
-    # using standard mlb scale 20-80 with 50 as average, 10 points per std deviation
-
-    if pd.isna(val) or std == 0:
-        return 50 # Default to average if missing data
+    if pd.isna(val) or val is None or std == 0:
+        return 50 # default to average if missing data
     
     z_score = (val - mean) / std
     
+    # flip if low is good like whiff for batters or hard hit for pitchers
     if higher_is_better:
         grade = 50 + (z_score * 10)
     else:
-        grade = 50 - (z_score * 10) # flip it for stats like whiff for pitchers where its better to be lower
+        grade = 50 - (z_score * 10) 
         
-    # clamp the grade between 20 and 80 (the MLB scale limits)
+    # clamp the grade between 20 and 80
+    # mlb scale
     return max(20, min(80, grade))
 
 def update_all_grades():
     conn = get_db_connection()
     cur = conn.cursor()
     
+    print("Fetching player performance data from database...")
+    
+    # 1. Fetch data safely (Avoiding duplicate report_id columns)
     query = """
         SELECT p.primary_position, pm.* FROM ScoutingReport r
         JOIN Player p ON r.player_id = p.player_id
         JOIN PerformanceMetrics pm ON r.report_id = pm.report_id
     """
-    
     cur.execute(query)
     data = cur.fetchall()
     
-    # get column names from the cursor description
     columns = [desc[0] for desc in cur.description]
-    
-    # load into Pandas DataFrame manually
     df = pd.DataFrame(data, columns=columns)
     
-    # seperate pitchers and hitters
     pitchers = df[df['primary_position'] == 'P'].copy()
     hitters = df[df['primary_position'] != 'P'].copy()
 
+    # load the true MLB Averages CSV
+    try:
+        baselines = pd.read_csv('data/mlb_2025_league_averages.csv')
+        
+        # convert CSV into a dictionary -> dict[player_type][metric_name] = (mean, std) so its faster
+        # nested dictionary with two main keys Hitter and Pitcher
+        # then each of those is a dictionary of metric_name to (mean, std_dev) tuple
+        b_dict = {'Hitter': {}, 'Pitcher': {}}
+        for index, row in baselines.iterrows():
+            b_dict[row['player_type']][row['metric_name']] = (row['mean'], row['std_dev'])
+            
+    except FileNotFoundError:
+        print("Error: mlb_2025_league_averages.csv not found.")
+        return
+
+    # get the baseline mean and std for a given player type and metric
+    def get_baseline(ptype, metric):
+        return b_dict.get(ptype, {}).get(metric, (0, 0))
+
+    # list of tuples (grade, report_id)
     updates = []
 
     # GRADE PITCHERS
     if not pitchers.empty:
-        # get the means and stds for each metric to calculate z-scores
-        p_means = pitchers.mean(numeric_only=True)
-        p_stds = pitchers.std(numeric_only=True)
-
-
         for index, row in pitchers.iterrows():
-            # higher is better for these
-            velo_grade = calculate_z_score_grade(row['four_seam_velocity'], p_means['four_seam_velocity'], p_stds['four_seam_velocity'])
-            whiff_grade = calculate_z_score_grade(row['whiff_percentage'], p_means['whiff_percentage'], p_stds['whiff_percentage'])
-            k_grade = calculate_z_score_grade(row['k_percentage'], p_means['k_percentage'], p_stds['k_percentage'])
-            
-            # lower is better for these
-            hard_hit_grade = calculate_z_score_grade(row['hard_hit_percentage'], p_means['hard_hit_percentage'], p_stds['hard_hit_percentage'], False)
-            bb_grade = calculate_z_score_grade(row['bb_percentage'], p_means['bb_percentage'], p_stds['bb_percentage'], False)
+            m_velo, s_velo = get_baseline('Pitcher', 'four_seam_velocity')
+            m_whiff, s_whiff = get_baseline('Pitcher', 'whiff_percentage')
+            m_k, s_k = get_baseline('Pitcher', 'k_percentage')
+            m_hard, s_hard = get_baseline('Pitcher', 'hard_hit_percentage')
+            m_bb, s_bb = get_baseline('Pitcher', 'bb_percentage')
 
-            # we can change the weights later if we want
+            # higher is better for these for pitchers
+            velo_grade = calculate_z_score_grade(row.get('four_seam_velocity'), m_velo, s_velo)
+            whiff_grade = calculate_z_score_grade(row.get('whiff_percentage'), m_whiff, s_whiff)
+            k_grade = calculate_z_score_grade(row.get('k_percentage'), m_k, s_k)
+            
+            # lower is better for these for pitchers
+            hard_hit_grade = calculate_z_score_grade(row.get('hard_hit_percentage'), m_hard, s_hard, False)
+            bb_grade = calculate_z_score_grade(row.get('bb_percentage'), m_bb, s_bb, False)
+
+            # we can change these weights later
             final_grade = (velo_grade * 0.2) + (whiff_grade * 0.25) + (k_grade * 0.25) + (hard_hit_grade * 0.2) + (bb_grade * 0.1)
+            
             updates.append((int(final_grade), int(row['report_id'])))
 
     # GRADE HITTERS
     if not hitters.empty:
-        # get the means and stds for each metric to calculate z-scores
-        h_means = hitters.mean(numeric_only=True)
-        h_stds = hitters.std(numeric_only=True)
-
         for index, row in hitters.iterrows():
-            # higher is better for theser
-            xwoba_grade = calculate_z_score_grade(row['xwoba'], h_means['xwoba'], h_stds['xwoba'])
-            hard_hit_grade = calculate_z_score_grade(row['hard_hit_percentage'], h_means['hard_hit_percentage'], h_stds['hard_hit_percentage'])
-            
-            # lower is better for these
-            whiff_grade = calculate_z_score_grade(row['whiff_percentage'], h_means['whiff_percentage'], h_stds['whiff_percentage'], False)
-            chase_grade = calculate_z_score_grade(row['out_zone_swing_percentage'], h_means['out_zone_swing_percentage'], h_stds['out_zone_swing_percentage'], False)
+            m_xwoba, s_xwoba = get_baseline('Hitter', 'xwoba')
+            m_hard, s_hard = get_baseline('Hitter', 'hard_hit_percentage')
+            m_whiff, s_whiff = get_baseline('Hitter', 'whiff_percentage')
+            m_chase, s_chase = get_baseline('Hitter', 'out_zone_swing_percentage')
 
-            # we can change the weights later if we want
+            # higher is better for these for hitters
+            xwoba_grade = calculate_z_score_grade(row.get('xwoba'), m_xwoba, s_xwoba)
+            hard_hit_grade = calculate_z_score_grade(row.get('hard_hit_percentage'), m_hard, s_hard)
+            
+            # lower is better for these for hitters
+            whiff_grade = calculate_z_score_grade(row.get('whiff_percentage'), m_whiff, s_whiff, False)
+            chase_grade = calculate_z_score_grade(row.get('out_zone_swing_percentage'), m_chase, s_chase, False)
+
+            # we can change these weights later
             final_grade = (xwoba_grade * 0.4) + (hard_hit_grade * 0.3) + (whiff_grade * 0.15) + (chase_grade * 0.15)
+            
             updates.append((int(final_grade), int(row['report_id'])))
 
-    # UPDATE DATABASE
-    try:
-        cur.executemany("""
-            UPDATE ScoutingReport 
-            SET overall_grade = %s 
-            WHERE report_id = %s
-        """, updates)
-    
-        conn.commit()
-        print(f"Successfully calculated and updated {len(updates)} scouting grades.")
-    except Exception as e:
-        conn.rollback()
-        print(f"Error updating database: {e}")
-    finally:
-        cur.close()
-        conn.close()
+    # update the database with the new grades
+    if updates:
+        try:
+            cur.executemany("""
+                UPDATE ScoutingReport 
+                SET overall_grade = %s 
+                WHERE report_id = %s
+            """, updates)
+        
+            conn.commit()
+            print(f"Success, Calculated and updated {len(updates)} scouting grades using MLB 2025 baselines.")
+        except Exception as e:
+            conn.rollback()
+            print(f"Error updating database: {e}")
+        finally:
+            cur.close()
+            conn.close()
+    else:
+        print("No players found to update.")
 
 if __name__ == "__main__":
     update_all_grades()
