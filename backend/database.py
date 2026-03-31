@@ -149,11 +149,31 @@ def checkScout(name):
     
     return False,"Error. Name exists in database"
 
-def createReport(scout,player,year):
+def checkReport(scout,player,year): #bool type
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        player_id = getPlayerId(player)
+        scout_id = getScoutID(scout)
+        cur.execute("SELECT * FROM ScoutingReport WHERE player_id=%s AND scout_id=%s AND report_date = %s",(player_id,scout_id,year,))
+        ans = cur.fetchall()
+        if ans: return True
+        return False
+
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+def getPlayer(player):
     player_parts = player.split()   #break apart for sending names along
     firstName = player_parts[0]
     lastName = player_parts[1]
-    
+    return firstName, lastName
+
+def getPlayerId(player):
+    firstName, lastName = getPlayer(player)
     conn = get_db_connection()
     cur = conn.cursor()
 
@@ -162,16 +182,34 @@ def createReport(scout,player,year):
     
     if play_id:     #get rid of tuple
         play_id = play_id[0]
+    cur.close()
+    conn.close()
+    
+    return play_id
 
+def getScoutID(scout):
+    conn = get_db_connection()
+    cur = conn.cursor()
     cur.execute("SELECT scout_id FROM Scout WHERE name = %s",(scout,))
     scout_id = cur.fetchone()
     
     if scout_id:
         scout_id = scout_id[0]
+    
+    cur.close()
+    conn.close()
+    return scout_id
 
+def createReport(scout,player,year):
+    play_id = getPlayerId(player)
+    
+    scout_id = getScoutID(scout)
+ 
     grade = advancedFunc()      #IMPLEMENTATION AT BOTTOM
 
     try:
+        conn = get_db_connection()
+        cur = conn.cursor()
         #check if this already exists(all data matches) or not before adding it!
         cur.execute('''SELECT report_id FROM ScoutingReport WHERE player_id=%s AND
                         scout_id=%s AND overall_grade=%s AND report_date=%s''',
@@ -258,6 +296,97 @@ def insertPositionInfo(scoutName,player,year,exitV,launchAng,xwoba,xobp,hh,zoneS
 
 def advancedFunc():
     return 0
+
+def updatePitcherMetrics(report_id, hh, outzone, barrel, k, bb, whiff, gb, velocity, spin):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute('''UPDATE PerformanceMetrics SET
+                    hard_hit_percentage = %s,
+                    out_zone_swing_miss_percentage = %s,
+                    barrel_percentage = %s,
+                    k_percentage = %s,
+                    bb_percentage = %s,
+                    whiff_percentage = %s,
+                    gb_percentage = %s,
+                    four_seam_velocity = %s,
+                    four_seam_spin = %s
+                    WHERE report_id = %s''',
+                (hh, outzone, barrel, k, bb, whiff, gb, velocity, spin, report_id))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    return "Pitcher metrics updated successfully"
+
+def updatePositionMetrics(report_id, exitV, launchAng, xwoba, xobp, hh, zoneSwing, zoneSwingMiss, outZoneSwing, outZoneSwingMiss):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute('''UPDATE PerformanceMetrics SET
+                    exit_velocity = %s,
+                    launch_angle = %s,
+                    xwoba = %s,
+                    xobp = %s,
+                    hard_hit_percentage = %s,
+                    zone_swing_percentage = %s,
+                    zone_swing_miss_percentage = %s,
+                    out_zone_swing_percentage = %s,
+                    out_zone_swing_miss_percentage = %s
+                    WHERE report_id = %s''',
+                (exitV, launchAng, xwoba, xobp, hh, zoneSwing, zoneSwingMiss, outZoneSwing, outZoneSwingMiss, report_id))
+    
+    conn.commit()
+    cur.close()
+    conn.close()
+    return "Position player metrics updated successfully"
+
+def getReportId(scout, player, year):
+    player_id = getPlayerId(player)
+    scout_id = getScoutID(scout)
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    cur.execute('''SELECT report_id FROM ScoutingReport 
+                   WHERE player_id = %s AND scout_id = %s AND report_date = %s''',
+                (player_id, scout_id, year))
+    result = cur.fetchone()
+    
+    cur.close()
+    conn.close()
+    
+    if result:
+        return result[0]
+    return None
+
+def getPitcherMetrics(report_id):
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    
+    cur.execute('''SELECT hard_hit_percentage, out_zone_swing_miss_percentage, barrel_percentage,
+                          k_percentage, bb_percentage, whiff_percentage, gb_percentage,
+                          four_seam_velocity, four_seam_spin
+                   FROM PerformanceMetrics WHERE report_id = %s''', (report_id,))
+    data = cur.fetchone()
+    
+    cur.close()
+    conn.close()
+    return data
+
+def getPositionMetrics(report_id):
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    
+    cur.execute('''SELECT exit_velocity, launch_angle, xwoba, xobp, hard_hit_percentage,
+                          zone_swing_percentage, zone_swing_miss_percentage,
+                          out_zone_swing_percentage, out_zone_swing_miss_percentage
+                   FROM PerformanceMetrics WHERE report_id = %s''', (report_id,))
+    data = cur.fetchone()
+    
+    cur.close()
+    conn.close()
+    return data
 
 
 def start_db():

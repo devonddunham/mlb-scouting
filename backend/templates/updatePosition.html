@@ -1,0 +1,40 @@
+<html>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert {{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <h1>UPDATE POSITION PLAYER INFO FOR {{ player }}</h1>
+    <body>
+        <form action="{{url_for('updatePositionStats')}}" method="POST">
+            <input type="hidden" name="scout" value="{{ scout }}">
+            <input type="hidden" name="player" value="{{ player }}">
+            <input type="hidden" name="year" value="{{ year }}">
+            
+            Exit Velocity
+            <input type="number" step="any" name="exit_velocity" value="{{ metrics.exit_velocity or '' }}"/><br>
+            Launch Angle
+            <input type="number" step="any" name="launch_angle" value="{{ metrics.launch_angle or '' }}"/><br>
+            Expected Weighted On-Base Average (xwOBA)
+            <input type="number" step="any" name="xwoba" value="{{ metrics.xwoba or '' }}"/><br>
+            Expected On-Base Average (xoBP)
+            <input type="number" step="any" name="xobp" value="{{ metrics.xobp or '' }}"/><br>
+            Hard Hit Percentage
+            <input type="number" step="any" name="hh" value="{{ metrics.hard_hit_percentage or '' }}"/><br>
+            Zone Swing Percentage
+            <input type="number" step="any" name="zoneSwing" value="{{ metrics.zone_swing_percentage or '' }}"/><br>
+            Zone Swing Miss Percentage
+            <input type="number" step="any" name="zoneSwingMiss" value="{{ metrics.zone_swing_miss_percentage or '' }}"/><br>
+            Out Zone Swing Percentage
+            <input type="number" step="any" name="outzoneSwing" value="{{ metrics.out_zone_swing_percentage or '' }}"/><br>
+            Out Zone Swing Miss Percentage
+            <input type="number" step="any" name="outzoneSwingMiss" value="{{ metrics.out_zone_swing_miss_percentage or '' }}"/><br>
+
+            <input type="submit" value="Update"/>
+        </form>
+        <a href="/updateReport">Back</a>
+    </body>
+</html>

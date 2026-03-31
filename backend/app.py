@@ -185,6 +185,104 @@ def playerStats():
 @app.route('/updateReport')
 def updateReport():
     return render_template('updateReport.html')
+@app.route('/changeReport', methods=['POST'])
+def changeReport():
+    sName = request.form['scoutName']
+    pName = request.form['playerName']
+    year = request.form['year']
+    exists = checkReport(sName,pName,year)
+    
+    if exists:
+        firstName, lastName = getPlayer(pName)
+        position = fetch_data("SELECT primary_position FROM Player WHERE first_name = %s AND last_name = %s",(firstName,lastName,))
+        if position[0][0] == 'P':
+            return redirect(url_for('updatePitcher', scout=sName, player=pName, year=year))
+        else:
+            return redirect(url_for('updatePosition', scout=sName, player=pName, year=year))
+    else:
+        flash("Could not find report with given information")
+        return redirect(url_for('updateReport'))
+
+@app.route('/updatePitcher/<scout>/<player>/<year>')
+def updatePitcher(scout, player, year):
+    report_id = getReportId(scout, player, year)
+    if report_id:
+        metrics = getPitcherMetrics(report_id)
+        return render_template('updatePitcher.html', scout=scout, player=player, year=year, metrics=metrics)
+    else:
+        flash("Report not found")
+        return redirect(url_for('updateReport'))
+
+@app.route('/updatePosition/<scout>/<player>/<year>')
+def updatePosition(scout, player, year):
+    report_id = getReportId(scout, player, year)
+    if report_id:
+        metrics = getPositionMetrics(report_id)
+        return render_template('updatePosition.html', scout=scout, player=player, year=year, metrics=metrics)
+    else:
+        flash("Report not found")
+        return redirect(url_for('updateReport'))
+
+@app.route('/updatePitcherStats', methods=['POST'])
+def updatePitcherStats():
+    try:
+        scout = request.form['scout']
+        player = request.form['player']
+        year = int(request.form['year'])
+        
+        report_id = getReportId(scout, player, year)
+        if not report_id:
+            flash("Report not found")
+            return redirect(url_for('updateReport'))
+        
+        # Get form data
+        hh = float(request.form['hh_perc'])
+        outzone = float(request.form['outzone_perc'])
+        barrel = float(request.form['barrel_perc'])
+        k = float(request.form['k_perc'])
+        bb = float(request.form['bb_perc'])
+        whiff = float(request.form['whiff_perc'])
+        gb = float(request.form['gb_perc'])
+        velocity = float(request.form['fourSeamVel_perc'])
+        spin = float(request.form['fourSeamSpin_perc'])
+        
+        message = updatePitcherMetrics(report_id, hh, outzone, barrel, k, bb, whiff, gb, velocity, spin)
+        flash(message)
+        return redirect(url_for('index'))
+    except Exception as e:
+        flash("Error updating report")
+        return redirect(url_for('updateReport'))
+
+@app.route('/updatePositionStats', methods=['POST'])
+def updatePositionStats():
+    try:
+        scout = request.form['scout']
+        player = request.form['player']
+        year = int(request.form['year'])
+        
+        report_id = getReportId(scout, player, year)
+        if not report_id:
+            flash("Report not found")
+            return redirect(url_for('updateReport'))
+        
+        # Get form data
+        exitV = float(request.form['exit_velocity'])
+        launchAng = float(request.form['launch_angle'])
+        xwoba = float(request.form['xwoba'])
+        xobp = float(request.form['xobp'])
+        hh = float(request.form['hh'])
+        zoneSwing = float(request.form['zoneSwing'])
+        zoneSwingMiss = float(request.form['zoneSwingMiss'])
+        outZoneSwing = float(request.form['outzoneSwing'])
+        outZoneSwingMiss = float(request.form['outzoneSwingMiss'])
+        
+        message = updatePositionMetrics(report_id, exitV, launchAng, xwoba, xobp, hh, zoneSwing, zoneSwingMiss, outZoneSwing, outZoneSwingMiss)
+        flash(message)
+        return redirect(url_for('index'))
+    except Exception as e:
+        flash("Error updating report")
+        return redirect(url_for('updateReport'))
+
 
 if __name__ == '__main__':
     app.run(debug=True)
