@@ -283,6 +283,23 @@ def updatePositionStats():
         flash("Error updating report")
         return redirect(url_for('updateReport'))
 
+@app.route('/deleteReport')
+def deleteReport():
+    return render_template('deleteReport.html')
+@app.route('/removeReport', methods=['POST'])
+def removeRep():
+    try:
+        scout = request.form['scoutName']
+        player = request.form['playerName']
+        year = int(request.form['year'])
+        
+        message = removeReport(scout, player, year)
+        flash(message)
+        return redirect(url_for('index'))
+    except Exception as e:
+        flash(f"Error deleting report: {str(e)}")
+        return redirect(url_for('deleteReport'))
+
 
 if __name__ == '__main__':
     app.run(debug=True)

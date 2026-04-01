@@ -157,7 +157,7 @@ def checkReport(scout,player,year): #bool type
         scout_id = getScoutID(scout)
         cur.execute("SELECT * FROM ScoutingReport WHERE player_id=%s AND scout_id=%s AND report_date = %s",(player_id,scout_id,year,))
         ans = cur.fetchall()
-        if ans: return True
+        if ans: return True     #if report exists
         return False
 
     finally:
@@ -293,6 +293,34 @@ def insertPositionInfo(scoutName,player,year,exitV,launchAng,xwoba,xobp,hh,zoneS
     return "Report created successfully"
 
 
+def removeReport(scout, player, year):
+    ans = checkReport(scout, player, year)
+    print(ans)
+    if not ans:
+        return "Report not found"
+    else:
+        print("report found")
+    
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        report_id = getReportId(scout, player, year)
+        
+        cur.execute("DELETE FROM ScoutingReport WHERE report_id = %s", (report_id,)) #cascaded, so handles PerformanceMetrics
+        conn.commit()
+        print("Report deleeting!")
+        return "Report deleted successfully"
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        return f"Error deleting report: {str(e)}"
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
 def advancedFunc():
     return 0
