@@ -5,6 +5,8 @@ import pybaseball
 import requests
 from bs4 import BeautifulSoup
 
+from calculate_grade import update_all_grades
+
 
 # web scraping function to get player position
 def get_player_position(first_name: str, last_name: str, player_id: int) -> str | None:
@@ -343,3 +345,4 @@ if __name__ == "__main__":
     populate_players()
     populate_scouts()
     populate_metrics()
+    update_all_grades()
