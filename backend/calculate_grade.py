@@ -23,9 +23,6 @@ def update_all_grades():
     conn = get_db_connection()
     cur = conn.cursor()
     
-    print("Fetching player performance data from database...")
-    
-    # 1. Fetch data safely (Avoiding duplicate report_id columns)
     query = """
         SELECT p.primary_position, pm.* FROM ScoutingReport r
         JOIN Player p ON r.player_id = p.player_id
@@ -125,6 +122,96 @@ def update_all_grades():
             conn.close()
     else:
         print("No players found to update.")
+
+def update_single_grade(report_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    query = """
+        SELECT p.primary_position, pm.* FROM ScoutingReport r
+        JOIN Player p ON r.player_id = p.player_id
+        JOIN PerformanceMetrics pm ON r.report_id = pm.report_id
+    """
+    cur.execute(query)
+    data = cur.fetchall()
+    
+    columns = [desc[0] for desc in cur.description]
+    df = pd.DataFrame(data, columns=columns)
+    
+    # only find the report we need
+    target_row = df[df['report_id'] == int(report_id)]
+    
+    if target_row.empty:
+        print(f"Error: Report ID {report_id} not found.")
+        return
+        
+    # get the row as a series
+    row = target_row.iloc[0]
+
+    # load the true MLB Averages CSV
+    try:
+        baselines = pd.read_csv('data/mlb_2025_league_averages.csv')
+        b_dict = {'Hitter': {}, 'Pitcher': {}}
+        for index, b_row in baselines.iterrows():
+            b_dict[b_row['player_type']][b_row['metric_name']] = (b_row['mean'], b_row['std_dev'])
+    except FileNotFoundError:
+        print("Error: mlb_2025_league_averages.csv not found.")
+        return
+
+    def get_baseline(ptype, metric):
+        return b_dict.get(ptype, {}).get(metric, (0, 0))
+
+    update = None
+
+    # we only need the one row
+    if row['primary_position'] == 'P':
+        # pitcher math
+        m_velo, s_velo = get_baseline('Pitcher', 'four_seam_velocity')
+        m_whiff, s_whiff = get_baseline('Pitcher', 'whiff_percentage')
+        m_k, s_k = get_baseline('Pitcher', 'k_percentage')
+        m_hard, s_hard = get_baseline('Pitcher', 'hard_hit_percentage')
+        m_bb, s_bb = get_baseline('Pitcher', 'bb_percentage')
+
+        velo_grade = calculate_z_score_grade(row.get('four_seam_velocity'), m_velo, s_velo)
+        whiff_grade = calculate_z_score_grade(row.get('whiff_percentage'), m_whiff, s_whiff)
+        k_grade = calculate_z_score_grade(row.get('k_percentage'), m_k, s_k)
+        hard_hit_grade = calculate_z_score_grade(row.get('hard_hit_percentage'), m_hard, s_hard, False)
+        bb_grade = calculate_z_score_grade(row.get('bb_percentage'), m_bb, s_bb, False)
+
+        final_grade = (velo_grade * 0.2) + (whiff_grade * 0.25) + (k_grade * 0.25) + (hard_hit_grade * 0.2) + (bb_grade * 0.1)
+        update = (int(final_grade), int(report_id))
+
+    else:
+        # hitter Math
+        m_xwoba, s_xwoba = get_baseline('Hitter', 'xwoba')
+        m_hard, s_hard = get_baseline('Hitter', 'hard_hit_percentage')
+        m_whiff, s_whiff = get_baseline('Hitter', 'whiff_percentage')
+        m_chase, s_chase = get_baseline('Hitter', 'out_zone_swing_percentage')
+
+        xwoba_grade = calculate_z_score_grade(row.get('xwoba'), m_xwoba, s_xwoba)
+        hard_hit_grade = calculate_z_score_grade(row.get('hard_hit_percentage'), m_hard, s_hard)
+        whiff_grade = calculate_z_score_grade(row.get('whiff_percentage'), m_whiff, s_whiff, False)
+        chase_grade = calculate_z_score_grade(row.get('out_zone_swing_percentage'), m_chase, s_chase, False)
+
+        final_grade = (xwoba_grade * 0.4) + (hard_hit_grade * 0.3) + (whiff_grade * 0.15) + (chase_grade * 0.15)
+        update = (int(final_grade), int(report_id))
+
+    # update DB
+    if update:
+        try:
+            cur.execute("""
+                UPDATE ScoutingReport 
+                SET overall_grade = %s 
+                WHERE report_id = %s
+            """, update)
+            conn.commit()
+            print(f"Success, updated scouting grade for report_id {update[1]}")
+        except Exception as e:
+            conn.rollback()
+            print(f"Error updating database: {e}")
+        finally:
+            cur.close()
+            conn.close()
 
 if __name__ == "__main__":
     update_all_grades()
