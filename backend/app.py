@@ -334,6 +334,8 @@ def search():
                 JOIN Scout s ON r.scout_id = s.scout_id
                 WHERE p.first_name ILIKE %s OR p.last_name ILIKE %s
             """
+
+            # three params, one for whole query, one for first name, one for last name
             cur.execute(query, (f'%{search_query}%', f'%{search_query}%'))
             
         elif search_type == 'scout':
@@ -346,6 +348,8 @@ def search():
                 JOIN Scout s ON r.scout_id = s.scout_id
                 WHERE s.name ILIKE %s
             """
+
+            # two params, one for whole query, one for scout name
             cur.execute(query, (f'%{search_query}%',))
 
         results = cur.fetchall()
