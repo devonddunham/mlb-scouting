@@ -3,6 +3,7 @@ from flask import Flask, render_template, request,redirect, url_for, flash, sess
 from database import *
 import psycopg2.extras
 
+from calculate_grade import update_single_grade
 
 app = Flask(__name__)
 app.secret_key ="23adkfn23rfnjfa98" 
@@ -247,6 +248,10 @@ def updatePitcherStats():
         spin = float(request.form['fourSeamSpin_perc'])
         
         message = updatePitcherMetrics(report_id, hh, outzone, barrel, k, bb, whiff, gb, velocity, spin)
+
+        # recalculate grade for this report
+        update_single_grade(report_id)
+
         flash(message)
         return redirect(url_for('index'))
     except Exception as e:
@@ -277,6 +282,10 @@ def updatePositionStats():
         outZoneSwingMiss = float(request.form['outzoneSwingMiss'])
         
         message = updatePositionMetrics(report_id, exitV, launchAng, xwoba, xobp, hh, zoneSwing, zoneSwingMiss, outZoneSwing, outZoneSwingMiss)
+
+        # recalculate grade for this report
+        update_single_grade(report_id)
+
         flash(message)
         return redirect(url_for('index'))
     except Exception as e:
@@ -300,6 +309,50 @@ def removeRep():
         flash(f"Error deleting report: {str(e)}")
         return redirect(url_for('deleteReport'))
 
+# search function: devon
+@app.route('/search', methods=['GET', 'POST'])
+def search():
+    results = []
+    search_query = ""
+    search_type = "player" # default
+
+    if request.method == 'POST':
+        search_query = request.form.get('search_query', '')
+        search_type = request.form.get('search_type', 'player')
+
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+        if search_type == 'player':
+            # search by player's first or last name
+            # ilike is a case-insensitive search
+            query = """
+                SELECT p.first_name, p.last_name, s.name as scout_name, 
+                       r.report_date as report_year, r.overall_grade
+                FROM ScoutingReport r
+                JOIN Player p ON r.player_id = p.player_id
+                JOIN Scout s ON r.scout_id = s.scout_id
+                WHERE p.first_name ILIKE %s OR p.last_name ILIKE %s
+            """
+            cur.execute(query, (f'%{search_query}%', f'%{search_query}%'))
+            
+        elif search_type == 'scout':
+            # search by scout's name
+            query = """
+                SELECT p.first_name, p.last_name, s.name as scout_name, 
+                       r.report_date as report_year, r.overall_grade
+                FROM ScoutingReport r
+                JOIN Player p ON r.player_id = p.player_id
+                JOIN Scout s ON r.scout_id = s.scout_id
+                WHERE s.name ILIKE %s
+            """
+            cur.execute(query, (f'%{search_query}%',))
+
+        results = cur.fetchall()
+        cur.close()
+        conn.close()
+
+    return render_template('search.html', results=results, search_query=search_query, search_type=search_type)
 
 if __name__ == '__main__':
     app.run(debug=True)
