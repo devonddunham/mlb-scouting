@@ -1,0 +1,35 @@
+<html>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert {{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+    {% endwith %}    
+    <h1>ENTER POSITION PLAYER INFO</h1>
+    <body>
+        <form action="{{url_for('playerStats')}}" method = "POST">
+            Exit Velocity
+            <input type = "number" step="any" name = "exit_velocity"/><br>
+            Launch Angle
+            <input type = "number" step="any" name = "launch_angle"/><br>
+            Expected Weighted On-Base Average (xwOBA)
+            <input type = "number" step="any" name = "xwoba"/><br>
+            Expected On-Base Average (xoBP)
+            <input type = "number" step="any" name ="xobp"/></br>
+            Hard Hit Percentage
+            <input type = "number" step="any" name ="hh"/></br>
+            Zone Swing Percentage
+            <input type = "number" step="any" name ="zoneSwing"/></br>
+            Zone Swing Miss Percentage
+            <input type = "number" step="any" name ="zoneSwingMiss"/></br>
+            Out Zone Swing Percentage
+            <input type = "number" step="any" name ="outzoneSwing"/></br>
+            Out Zone Swing Miss Percentage
+            <input type = "number" step="any" name ="outzoneSwingMiss"/></br>
+
+            <input type = "submit" value = "Submit"/> 
+        </form>
+        <a href="/addReport">Back</a>
+    </body>
+</html>

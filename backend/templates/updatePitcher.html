@@ -1,0 +1,40 @@
+<html>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert {{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <h1>UPDATE INFO FOR {{ player }} (Pitcher)</h1>
+    <body>
+        <form action="{{url_for('updatePitcherStats')}}" method="POST">
+            <input type="hidden" name="scout" value="{{ scout }}">
+            <input type="hidden" name="player" value="{{ player }}">
+            <input type="hidden" name="year" value="{{ year }}">
+            
+            Hard Hit Percentage
+            <input type="number" step="any" name="hh_perc" value="{{ metrics.hard_hit_percentage or '' }}"/><br>
+            Out of Zone Miss Percentage
+            <input type="number" step="any" name="outzone_perc" value="{{ metrics.out_zone_swing_miss_percentage or '' }}"/><br>
+            Barrel Percentage
+            <input type="number" step="any" name="barrel_perc" value="{{ metrics.barrel_percentage or '' }}"/><br>
+            K Percentage
+            <input type="number" step="any" name="k_perc" value="{{ metrics.k_percentage or '' }}"/><br>
+            BB Percentage <!--walk-->
+            <input type="number" step="any" name="bb_perc" value="{{ metrics.bb_percentage or '' }}"/><br>
+            Whiff Percentage
+            <input type="number" step="any" name="whiff_perc" value="{{ metrics.whiff_percentage or '' }}"/><br>
+            Ground ball Percentage
+            <input type="number" step="any" name="gb_perc" value="{{ metrics.gb_percentage or '' }}"/><br>
+            Four-Seam Velocity
+            <input type="number" step="any" name="fourSeamVel_perc" value="{{ metrics.four_seam_velocity or '' }}"/><br>
+            Four-Seam Spin
+            <input type="number" step="any" name="fourSeamSpin_perc" value="{{ metrics.four_seam_spin or '' }}"/><br>
+
+            <input type="submit" value="Update"/>
+        </form>
+        <a href="/updateReport">Back</a>
+    </body>
+</html>
