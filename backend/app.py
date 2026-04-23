@@ -1,5 +1,5 @@
 #TODO: Create, update, delete
-from flask import Flask, render_template, request,redirect, url_for, flash, session
+from flask import Flask, jsonify, render_template, request,redirect, url_for, flash, session
 from database import *
 import psycopg2.extras
 
@@ -7,6 +7,32 @@ from calculate_grade import update_single_grade
 
 app = Flask(__name__)
 app.secret_key ="23adkfn23rfnjfa98" 
+
+# fields for pitchers
+PITCHER_METRIC_FIELDS = [
+    "hard_hit_percentage",
+    "out_zone_swing_miss_percentage",
+    "barrel_percentage",
+    "k_percentage",
+    "bb_percentage",
+    "whiff_percentage",
+    "gb_percentage",
+    "four_seam_velocity",
+    "four_seam_spin",
+]
+
+# fields for position players
+POSITION_METRIC_FIELDS = [
+    "exit_velocity",
+    "launch_angle",
+    "xwoba",
+    "xobp",
+    "hard_hit_percentage",
+    "zone_swing_percentage",
+    "zone_swing_miss_percentage",
+    "out_zone_swing_percentage",
+    "out_zone_swing_miss_percentage",
+]
 
 def fetch_data(query,params=None):
     conn = get_db_connection()
@@ -16,6 +42,133 @@ def fetch_data(query,params=None):
     cur.close()
     conn.close()
     return data
+
+# get the data but in a list of dicts instead of list of tuples
+# easier for jsonify
+def fetch_data_dict(query, params=None):
+    return [dict(row) for row in fetch_data(query, params)]
+
+# get a single row as a dict, or None if no rows
+def fetch_one_data_dict(query, params=None):
+    rows = fetch_data_dict(query, params)
+    if rows:
+        return rows[0]
+    return None
+
+# return a single float value or None
+# if value is an empty string
+def to_nullable_float(value):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+        if value == "":
+            return None
+    return float(value)
+
+# get all details for a report
+# every metric, player info, scout info, team info
+def get_report_detail_row(report_id):
+    query = """
+        SELECT
+            r.report_id,
+            r.report_date,
+            r.overall_grade,
+            p.player_id,
+            p.first_name,
+            p.last_name,
+            p.primary_position,
+            p.team_id,
+            t.name AS team_name,
+            s.scout_id,
+            s.name AS scout_name,
+            pm.exit_velocity,
+            pm.launch_angle,
+            pm.xwoba,
+            pm.xobp,
+            pm.hard_hit_percentage,
+            pm.zone_swing_percentage,
+            pm.zone_swing_miss_percentage,
+            pm.out_zone_swing_percentage,
+            pm.out_zone_swing_miss_percentage,
+            pm.barrel_percentage,
+            pm.k_percentage,
+            pm.bb_percentage,
+            pm.whiff_percentage,
+            pm.gb_percentage,
+            pm.four_seam_velocity,
+            pm.four_seam_spin
+        FROM ScoutingReport r
+        JOIN Player p ON r.player_id = p.player_id
+        JOIN Scout s ON r.scout_id = s.scout_id
+        LEFT JOIN Team t ON p.team_id = t.team_id
+        LEFT JOIN PerformanceMetrics pm ON r.report_id = pm.report_id
+        WHERE r.report_id = %s
+    """
+
+    # return single dict with all info for this report
+    return fetch_one_data_dict(query, (report_id,))
+
+# turn the report details row into a more usable dict for the frontend
+def serialize_report_detail(report_row):
+    if not report_row:
+        return None
+
+    # report_row is already a dict, but reshape it for frontend
+    report = dict(report_row)
+
+    # if the player is a pitcher only include pitcher metrics, else only position player metrics
+    is_pitcher = report.get("primary_position") == "P"
+    metric_fields = PITCHER_METRIC_FIELDS if is_pitcher else POSITION_METRIC_FIELDS
+    report["report_type"] = "pitcher" if is_pitcher else "position"
+
+    # inside nested metrics dict, put needed metrics in with the value
+    report["metrics"] = {field: report.get(field) for field in metric_fields}
+    return report
+
+# search for player or scout
+def run_report_search(search_type, search_query):
+    pattern = f"%{search_query}%"
+
+    if search_type == "player":
+        query = """
+            SELECT
+                r.report_id,
+                p.first_name,
+                p.last_name,
+                s.name AS scout_name,
+                r.report_date AS report_year,
+                r.overall_grade
+            FROM ScoutingReport r
+            JOIN Player p ON r.player_id = p.player_id
+            JOIN Scout s ON r.scout_id = s.scout_id
+            WHERE p.first_name ILIKE %s OR p.last_name ILIKE %s
+            ORDER BY r.report_date DESC, p.last_name, p.first_name
+        """
+
+        # return all reports for this search
+        return fetch_data_dict(query, (pattern, pattern))
+
+    if search_type == "scout":
+        query = """
+            SELECT
+                r.report_id,
+                p.first_name,
+                p.last_name,
+                s.name AS scout_name,
+                r.report_date AS report_year,
+                r.overall_grade
+            FROM ScoutingReport r
+            JOIN Player p ON r.player_id = p.player_id
+            JOIN Scout s ON r.scout_id = s.scout_id
+            WHERE s.name ILIKE %s
+            ORDER BY r.report_date DESC, p.last_name, p.first_name
+        """
+
+        # return all reports for this search
+        return fetch_data_dict(query, (pattern,))
+
+    raise ValueError("Invalid search type")
 
 @app.route('/') #home
 def index():
@@ -42,6 +195,173 @@ def reports():
     """
     data = fetch_data(query)
     return render_template('table.html', title="Scouting Reports", data=data)
+
+# turn sql query for player into json for API
+@app.route('/api/players')
+def api_players():
+    try:
+        query = """
+            SELECT player_id, first_name, last_name, primary_position, team_id
+            FROM Player
+            ORDER BY last_name, first_name
+        """
+        return jsonify(fetch_data_dict(query))
+    except Exception:
+        app.logger.exception("Failed to fetch players")
+        return jsonify({"error": "Failed to fetch players"}), 500
+
+# turn sql query for team into json for API
+@app.route('/api/teams')
+def api_teams():
+    try:
+        query = """
+            SELECT team_id, name, division
+            FROM Team
+            ORDER BY division
+        """
+        return jsonify(fetch_data_dict(query))
+    except Exception:
+        app.logger.exception("Failed to fetch teams")
+        return jsonify({"error": "Failed to fetch teams"}), 500
+
+# turn sql query for scout into json for API
+@app.route('/api/scouts')
+def api_scouts():
+    try:
+        query = """
+            SELECT s.scout_id, s.name, s.team_id, t.name AS team_name
+            FROM Scout s
+            LEFT JOIN Team t ON s.team_id = t.team_id
+            ORDER BY s.name
+        """
+        return jsonify(fetch_data_dict(query))
+    except Exception:
+        app.logger.exception("Failed to fetch scouts")
+        return jsonify({"error": "Failed to fetch scouts"}), 500
+
+@app.route('/api/reports')
+def api_reports():
+    try:
+        query = """
+            SELECT
+                r.report_id,
+                p.player_id,
+                p.first_name,
+                p.last_name,
+                p.primary_position,
+                s.scout_id,
+                s.name AS scout_name,
+                r.overall_grade,
+                r.report_date
+            FROM ScoutingReport r
+            JOIN Player p ON r.player_id = p.player_id
+            JOIN Scout s ON r.scout_id = s.scout_id
+            ORDER BY r.report_date DESC, p.last_name, p.first_name
+        """
+        return jsonify(fetch_data_dict(query))
+    except Exception:
+        app.logger.exception("Failed to fetch reports")
+        return jsonify({"error": "Failed to fetch reports"}), 500
+
+@app.route('/api/reports/<int:report_id>')
+def api_report_details(report_id):
+    try:
+        report = serialize_report_detail(get_report_detail_row(report_id))
+        if not report:
+            return jsonify({"error": "Report not found"}), 404
+        return jsonify(report)
+    except Exception:
+        app.logger.exception("Failed to fetch report details")
+        return jsonify({"error": "Failed to fetch report details"}), 500
+
+@app.route('/api/reports/<int:report_id>', methods=['PUT'])
+def api_update_report(report_id):
+    try:
+        # get the metrics dict from the request body, or use empty dict if not provided
+        metrics_dict = request.get_json(silent=True) or {}
+        metrics = metrics_dict.get("metrics")
+
+        # if the type is not a dict
+        if not isinstance(metrics, dict):
+            return jsonify({"error": "Request body must include a metrics object"}), 400
+
+        report_row = get_report_detail_row(report_id)
+        if not report_row:
+            return jsonify({"error": "Report not found"}), 404
+
+        is_pitcher = report_row.get("primary_position") == "P"
+
+        # only care about the correpsonding metrics for player position
+        if is_pitcher:
+            values = [
+                to_nullable_float(metrics.get(field, report_row.get(field)))
+                for field in PITCHER_METRIC_FIELDS
+            ]
+            # update the metrics for this report, with all the stats updated
+            update_message = updatePitcherMetrics(report_id, [value for value in values])
+        else:
+            values = [
+                to_nullable_float(metrics.get(field, report_row.get(field)))
+                for field in POSITION_METRIC_FIELDS
+            ]
+            # update the metrics for this report, with all the stats updated
+            update_message = updatePositionMetrics(report_id, [value for value in values])
+
+        update_single_grade(report_id)
+        updated_report = serialize_report_detail(get_report_detail_row(report_id))
+        return jsonify({"message": update_message, "report": updated_report})
+    except ValueError as exc:
+        return jsonify({"error": f"Invalid metric value: {str(exc)}"}), 400
+    except Exception:
+        app.logger.exception("Failed to update report")
+        return jsonify({"error": "Failed to update report"}), 500
+
+@app.route('/api/reports/<int:report_id>', methods=['DELETE'])
+def api_delete_report(report_id):
+    conn = None
+    cur = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM ScoutingReport WHERE report_id = %s RETURNING report_id",
+            (report_id,),
+        )
+        deleted = cur.fetchone()
+        if not deleted:
+            conn.rollback()
+            return jsonify({"error": "Report not found"}), 404
+
+        conn.commit()
+        return jsonify({"message": "Report deleted successfully", "report_id": report_id})
+    except Exception:
+        if conn:
+            conn.rollback()
+        app.logger.exception("Failed to delete report")
+        return jsonify({"error": "Failed to delete report"}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+@app.route('/api/search')
+def api_search():
+    try:
+        search_query = request.args.get("query", "").strip()
+        search_type = request.args.get("type", "player").strip().lower()
+
+        if not search_query:
+            return jsonify([])
+
+        # turn search results into json
+        results = run_report_search(search_type, search_query)
+        return jsonify(results)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception:
+        app.logger.exception("Failed to search reports")
+        return jsonify({"error": "Failed to search reports"}), 500
 
 
 
@@ -317,44 +637,16 @@ def search():
     search_type = "player" # default
 
     if request.method == 'POST':
-        search_query = request.form.get('search_query', '')
-        search_type = request.form.get('search_type', 'player')
 
-        conn = get_db_connection()
-        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-
-        if search_type == 'player':
-            # search by player's first or last name
-            # ilike is a case-insensitive search
-            query = """
-                SELECT p.first_name, p.last_name, s.name as scout_name, 
-                       r.report_date as report_year, r.overall_grade
-                FROM ScoutingReport r
-                JOIN Player p ON r.player_id = p.player_id
-                JOIN Scout s ON r.scout_id = s.scout_id
-                WHERE p.first_name ILIKE %s OR p.last_name ILIKE %s
-            """
-
-            # three params, one for whole query, one for first name, one for last name
-            cur.execute(query, (f'%{search_query}%', f'%{search_query}%'))
-            
-        elif search_type == 'scout':
-            # search by scout's name
-            query = """
-                SELECT p.first_name, p.last_name, s.name as scout_name, 
-                       r.report_date as report_year, r.overall_grade
-                FROM ScoutingReport r
-                JOIN Player p ON r.player_id = p.player_id
-                JOIN Scout s ON r.scout_id = s.scout_id
-                WHERE s.name ILIKE %s
-            """
-
-            # two params, one for whole query, one for scout name
-            cur.execute(query, (f'%{search_query}%',))
-
-        results = cur.fetchall()
-        cur.close()
-        conn.close()
+        # get the query and the type of search
+        search_query = request.form.get('search_query', '').strip()
+        search_type = request.form.get('search_type', 'player').strip().lower()
+        if search_query:
+            try:
+                # run the search and get a list of matching reports
+                results = run_report_search(search_type, search_query)
+            except ValueError:
+                flash("Invalid search type")
 
     return render_template('search.html', results=results, search_query=search_query, search_type=search_type)
 
