@@ -224,8 +224,28 @@ def api_teams():
         app.logger.exception("Failed to fetch teams")
         return jsonify({"error": "Failed to fetch teams"}), 500
 
+# get a report summary row with player and scout info, for a given report id
+def get_report_summary_row(report_id):
+    query = """
+        SELECT
+            r.report_id,
+            p.player_id,
+            p.first_name,
+            p.last_name,
+            p.primary_position,
+            s.scout_id,
+            s.name AS scout_name,
+            r.overall_grade,
+            r.report_date
+        FROM ScoutingReport r
+        JOIN Player p ON r.player_id = p.player_id
+        JOIN Scout s ON r.scout_id = s.scout_id
+        WHERE r.report_id = %s
+    """
+    return fetch_one_data_dict(query, (report_id,))
+
 # turn sql query for scout into json for API
-@app.route('/api/scouts')
+@app.route('/api/scouts', methods=['GET'])
 def api_scouts():
     try:
         query = """
@@ -239,7 +259,66 @@ def api_scouts():
         app.logger.exception("Failed to fetch scouts")
         return jsonify({"error": "Failed to fetch scouts"}), 500
 
-@app.route('/api/reports')
+@app.route('/api/scouts', methods=['POST'])
+def api_create_scout():
+    conn = None
+    cur = None
+    try:
+        info = request.get_json(silent=True) or {}
+        name = (info.get("name") or "").strip()
+        team_id = (info.get("team_id") or "").strip().upper()
+
+        if not name:
+            return jsonify({"error": "Scout name is required"}), 400
+        if not team_id:
+            return jsonify({"error": "Team ID is required"}), 400
+
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+        # enforce existing team to keep foreign key errors user-friendly
+        cur.execute("SELECT team_id FROM Team WHERE team_id = %s", (team_id,))
+        if not cur.fetchone():
+            return jsonify({"error": f"Team '{team_id}' not found"}), 400
+
+        cur.execute(
+            "SELECT scout_id FROM Scout WHERE LOWER(name) = LOWER(%s)",
+            (name,),
+        )
+        existing = cur.fetchone()
+        if existing:
+            return jsonify({"error": "Scout name already exists"}), 409
+
+        cur.execute(
+            "INSERT INTO Scout (name, team_id) VALUES (%s, %s) RETURNING scout_id",
+            (name, team_id),
+        )
+        new_id = cur.fetchone()["scout_id"]
+        conn.commit()
+
+        # left join to get team name in response
+        scout = fetch_one_data_dict(
+            """
+            SELECT s.scout_id, s.name, s.team_id, t.name AS team_name
+            FROM Scout s
+            LEFT JOIN Team t ON s.team_id = t.team_id
+            WHERE s.scout_id = %s
+            """,
+            (new_id,),
+        )
+        return jsonify({"message": "Scout created successfully", "scout": scout}), 201
+    except Exception:
+        if conn:
+            conn.rollback()
+        app.logger.exception("Failed to create scout")
+        return jsonify({"error": "Failed to create scout"}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+@app.route('/api/reports', methods=['GET'])
 def api_reports():
     try:
         query = """
@@ -262,6 +341,95 @@ def api_reports():
     except Exception:
         app.logger.exception("Failed to fetch reports")
         return jsonify({"error": "Failed to fetch reports"}), 500
+
+# need to post results
+@app.route('/api/reports', methods=['POST'])
+def api_create_report():
+    conn = None
+    cur = None
+    try:
+        info = request.get_json(silent=True) or {}
+        player_id = info.get("player_id")
+        scout_id = info.get("scout_id")
+        year = info.get("year")
+
+        if player_id is None or scout_id is None or year is None:
+            return jsonify({"error": "player_id, scout_id, and year are required"}), 400
+
+        try:
+            player_id = int(player_id)
+            scout_id = int(scout_id)
+            year = int(year)
+        except ValueError:
+            return jsonify({"error": "player_id, scout_id, and year must be integers"}), 400
+
+        conn = get_db_connection()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+        # in case we try to create a report for a player or scout that doesn't exist
+        cur.execute("SELECT player_id FROM Player WHERE player_id = %s", (player_id,))
+        if not cur.fetchone():
+            return jsonify({"error": "Player not found"}), 404
+
+        cur.execute("SELECT scout_id FROM Scout WHERE scout_id = %s", (scout_id,))
+        if not cur.fetchone():
+            return jsonify({"error": "Scout not found"}), 404
+
+        # since all reports are based on a specific year, prevent duplicate reports for same player, scout, and year
+        cur.execute(
+            """
+            SELECT report_id
+            FROM ScoutingReport
+            WHERE player_id = %s AND scout_id = %s AND report_date = %s
+            """,
+            (player_id, scout_id, year),
+        )
+        existing = cur.fetchone()
+        if existing:
+            existing_report = get_report_summary_row(existing["report_id"])
+            return jsonify({"error": "Report already exists", "report": existing_report}), 409
+
+        cur.execute(
+            """
+            INSERT INTO ScoutingReport (player_id, scout_id, report_date, overall_grade)
+            VALUES (%s, %s, %s, %s)
+            RETURNING report_id
+            """,
+            (player_id, scout_id, year, 0),
+        )
+        new_report_id = cur.fetchone()["report_id"]
+
+        # initialize empty metrics row so report detail/edit always has a target row
+        cur.execute(
+            """
+            INSERT INTO PerformanceMetrics (
+                report_id, exit_velocity, launch_angle, xwoba, xobp,
+                hard_hit_percentage, zone_swing_percentage, zone_swing_miss_percentage,
+                out_zone_swing_percentage, out_zone_swing_miss_percentage, barrel_percentage,
+                k_percentage, bb_percentage, whiff_percentage, gb_percentage,
+                four_seam_velocity, four_seam_spin
+            ) VALUES (
+                %s, NULL, NULL, NULL, NULL,
+                NULL, NULL, NULL, NULL, NULL, NULL,
+                NULL, NULL, NULL, NULL, NULL, NULL
+            )
+            """,
+            (new_report_id,),
+        )
+
+        conn.commit()
+        report = get_report_summary_row(new_report_id)
+        return jsonify({"message": "Report created successfully", "report": report}), 201
+    except Exception:
+        if conn:
+            conn.rollback()
+        app.logger.exception("Failed to create report")
+        return jsonify({"error": "Failed to create report"}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
 @app.route('/api/reports/<int:report_id>')
 def api_report_details(report_id):
@@ -298,14 +466,14 @@ def api_update_report(report_id):
                 for field in PITCHER_METRIC_FIELDS
             ]
             # update the metrics for this report, with all the stats updated
-            update_message = updatePitcherMetrics(report_id, [value for value in values])
+            update_message = updatePitcherMetrics(report_id, [val for val in values if val is not None])
         else:
             values = [
                 to_nullable_float(metrics.get(field, report_row.get(field)))
                 for field in POSITION_METRIC_FIELDS
             ]
             # update the metrics for this report, with all the stats updated
-            update_message = updatePositionMetrics(report_id, [value for value in values])
+            update_message = updatePositionMetrics(report_id, [val for val in values if val is not None])
 
         update_single_grade(report_id)
         updated_report = serialize_report_detail(get_report_detail_row(report_id))
