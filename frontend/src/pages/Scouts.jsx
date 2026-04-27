@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 function Scouts() {
   const [scouts, setScouts] = useState([]);
+  const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -9,14 +10,34 @@ function Scouts() {
   const [formError, setFormError] = useState("");
   const [form, setForm] = useState({ name: "", team_id: "" });
 
+  const parseResponse = async (res) => {
+    const text = await res.text();
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error(`Server returned non-JSON response (HTTP ${res.status})`);
+    }
+  };
+
   useEffect(() => {
     fetch("/api/scouts")
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
+      .then(async (res) => {
+        const data = await parseResponse(res);
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        return data;
       })
       .then((data) => { setScouts(data); setLoading(false); })
       .catch((err) => { setError(err.message); setLoading(false); });
+
+    fetch("/api/teams")
+      .then(async (res) => {
+        const data = await parseResponse(res);
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        return data;
+      })
+      .then(setTeams)
+      .catch(() => {});
   }, []);
 
   const handleChange = (e) => {
@@ -36,7 +57,7 @@ function Scouts() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: form.name, team_id: form.team_id }),
       });
-      const data = await res.json();
+      const data = await parseResponse(res);
       if (!res.ok) throw new Error(data.error || "Failed to create scout");
       setScouts((prev) => [...prev, data.scout]);
       setShowForm(false);
@@ -90,15 +111,21 @@ function Scouts() {
               style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #ccc", marginBottom: "16px", boxSizing: "border-box" }}
             />
 
-            <label style={{ display: "block", marginBottom: "6px", fontWeight: "bold" }}>Team ID</label>
-            <input
-              type="text"
+            <label style={{ display: "block", marginBottom: "6px", fontWeight: "bold" }}>Team</label>
+            <select
               name="team_id"
               value={form.team_id}
               onChange={handleChange}
-              placeholder="e.g. LAD, NYY, ATL"
               style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #ccc", marginBottom: "16px", boxSizing: "border-box" }}
-            />
+            >
+              <option value="">Select a team...</option>
+              {teams.length === 0 && <option disabled>No teams available</option>}
+              {teams.map((team) => (
+                <option key={team.team_id} value={team.team_id}>
+                  {team.team_id} - {team.name}
+                </option>
+              ))}
+            </select>
 
             {formError && (
               <p style={{ color: "red", marginBottom: "16px", fontSize: "14px" }}>{formError}</p>
